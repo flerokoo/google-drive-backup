@@ -1,0 +1,12 @@
+{
+  "name": "google-drive-backup",
+  "version": "1.0.0",
+  "description": "Saves files to google drive",
+  "main": "index.js",
+  "keywords": [],
+  "author": "Emile Shodiev <emile.shodiev@yandex.ru> (http://shodiev.ru)",
+  "license": "ISC",
+  "dependencies": {
+    "googleapis": "^39.2.0"
+  }
+}
