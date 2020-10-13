@@ -7,7 +7,7 @@ const backup = require("google-drive-backup");
 backup.defaults.CREDENTIALS_PATH = "creds/credentials.json";
 
 // path to save/load tokens to/from
-backup.defaults.TOKEN_PATH = "creds/token.json";
+backup.defaults.TOKENS_PATH = "creds/token.json";
 
 backup({
     backupFileName: "database.json",
