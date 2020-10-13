@@ -88,5 +88,6 @@ typings/
 .vscode
 
 /token.json
+/tokens.json
 /credentials.json
 /test.txt
