@@ -40,7 +40,6 @@ function getTokens() {
 
 function getToken(credsPath) {
     return getTokens().then(tokens => {
-        console.log("___GET_TOKEN", tokens && tokens[credsPath])
         return tokens && tokens[credsPath] ? tokens[credsPath] : null;
     });
 }
@@ -52,7 +51,6 @@ function saveToken(credsPath, token) {
         return new Promise((resolve, reject) => {
             fs.writeFile(DEFAULTS.TOKENS_PATH, JSON.stringify(tokens), err => {
                 if (err) return reject(err);
-                console.log("___SAVE_TOKEN", credsPath)
                 resolve();
             });
         });
@@ -74,7 +72,7 @@ function authorize(credentialsPath) {
         return getToken(credentialsPath)
     }).then(token => {
         if (token) {
-                oAuth2Client.setCredentials(JSON.parse(token));
+            oAuth2Client.setCredentials(JSON.parse(token));
             authorizedClients[credentialsPath] = oAuth2Client;
             return oAuth2Client;
         }
@@ -84,8 +82,8 @@ function authorize(credentialsPath) {
             oAuth2Client.setCredentials(JSON.parse(token));
             authorizedClients[credentialsPath] = oAuth2Client;
             return oAuth2Client;
-            });
         });
+    });
 }
 
 function getAccessToken(oAuth2Client) {
@@ -106,7 +104,6 @@ function getAccessToken(oAuth2Client) {
                 oAuth2Client.setCredentials(token);
                 // Store the token to disk for later program executions
                 resolve(JSON.stringify(token));
-                });
             });
         });
     });
@@ -140,12 +137,11 @@ async function backupFile({
 
     const auth = await authorize(credetialsPath);    
     const drive = google.drive({ version: 'v3', auth });
-    const requestBody = { name: backupFileName };
     const media = { body: fs.createReadStream(sourceFileName) };
 
 
     // iterate over pages to get all suitable files
-    const allFiles = [];
+    let allFiles = [];
     let currentPageResponse = null;
     while (currentPageResponse === null || !!currentPageResponse?.data?.nextPageToken) {
         var newPageResponse = await drive.files.list({
@@ -157,30 +153,35 @@ async function backupFile({
         allFiles.push(...newPageResponse.data.files);
         currentPageResponse = newPageResponse;        
     }    
+
+    allFiles = allFiles.filter(f => {
+        return parseNameVersionPair(f.name)[0] === parseNameVersionPair(backupFileName)[0]
+    });
     
     const fileExists = allFiles.length > 0;    
     // no files was found, just create a new one and return
     if (!fileExists) {        
         return drive.files.create({
-            requestBody,
+            requestBody: { name: backupFileName },
             media
         });
     }   
 
+ 
     // find max version of the file
-    const fileEntry = allFiles.reduce((prev, cur) => {
-        return parseNameVersionPair(prev.name)[1] < parseNameVersionPair(cur.name)[1]
-            ? cur
-            : prev;
-    });
-    console.log(fileEntry)
+    const fileEntry = allFiles        
+        .reduce((prev, cur) => {
+            return parseNameVersionPair(prev.name)[1] < parseNameVersionPair(cur.name)[1]
+                ? cur
+                : prev;
+        });
+    
 
     // create new version of the file (if user said so)
     if (fileExists && incrementVersion) {
         let [name, version] = parseNameVersionPair(fileEntry.name);
-        requestBody.name = name + "__" + (++version) + path.extname(fileEntry.name);
         return drive.files.create({
-            requestBody,
+            requestBody: { name : name + "__" + (++version) + path.extname(fileEntry.name) },
             media
         });
     }
@@ -188,7 +189,7 @@ async function backupFile({
     // update existing file
     return drive.files.update({
         fileId: fileEntry.id,
-        requestBody,
+        requestBody: { name: fileEntry.name },
         media
     });    
 }
@@ -197,8 +198,3 @@ backupFile.defaults = DEFAULTS;
 
 module.exports = backupFile;
 
-backupFile({
-    backupFileName: "TESTTT.txt",
-    sourceFileName: "test.txt",
-    incrementVersion: true
-});
