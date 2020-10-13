@@ -8,15 +8,15 @@ const SCOPES = [
 ];
 
 const DEFAULTS = {
-    TOKEN_PATH: 'token.json',
+    TOKENS_PATH: 'tokens.json',
     CREDENTIALS_PATH: 'credentials.json'
 }
 
-let authorizedClient = null;
+let authorizedClients = {};
 
 function readCredentials(path) {
     return new Promise((resolve, reject) => {
-        fs.readFile(path || DEFAULTS.CREDENTIALS_PATH, (err, content) => {
+        fs.readFile(path, (err, content) => {
             if (err) {
                 return reject("Error loading credentials");
             } 
@@ -25,25 +25,67 @@ function readCredentials(path) {
     });
 }
 
-function authorize(credentialsPath) {
-    if (authorizedClient !== null)
-        return Promise.resolve(authorizedClient);
+function getTokens() {
+    return new Promise((resolve) => {
+        fs.readFile(DEFAULTS.TOKENS_PATH, (err, content) => {
+            if (err) return resolve(null);
+            try {
+                resolve(JSON.parse(content));
+            } catch (e) {
+                resolve(null);
+            }
+        })
+    });
+}
 
-    return readCredentials(credentialsPath).then(credentials => {
-        const { client_secret, client_id, redirect_uris } = credentials.installed;
-        const oAuth2Client = new google.auth.OAuth2(
-            client_id, client_secret, redirect_uris[0]);
+function getToken(credsPath) {
+    return getTokens().then(tokens => {
+        console.log("___GET_TOKEN", tokens && tokens[credsPath])
+        return tokens && tokens[credsPath] ? tokens[credsPath] : null;
+    });
+}
 
-        // Check if we have previously stored a token.
-        return new Promise((resolve) => {
-            fs.readFile(DEFAULTS.TOKEN_PATH, (err, token) => {
-                if (err) return getAccessToken(oAuth2Client);
-                oAuth2Client.setCredentials(JSON.parse(token));
-                authorizedClient = oAuth2Client;
-                resolve(oAuth2Client);
+function saveToken(credsPath, token) {
+    return getTokens().then(tokens => {
+        if (!tokens) tokens = {};
+        tokens[credsPath] = token;
+        return new Promise((resolve, reject) => {
+            fs.writeFile(DEFAULTS.TOKENS_PATH, JSON.stringify(tokens), err => {
+                if (err) return reject(err);
+                console.log("___SAVE_TOKEN", credsPath)
+                resolve();
             });
         });
     });
+}
+
+
+function authorize(credentialsPath) {
+    if (authorizedClients[credentialsPath]) {
+        return Promise.resolve(authorizedClients[credentialsPath]);
+    }
+
+    var oAuth2Client = null;
+    return readCredentials(credentialsPath).then(credentials => {
+        const { client_secret, client_id, redirect_uris } = credentials.installed;
+        oAuth2Client = new google.auth.OAuth2(
+            client_id, client_secret, redirect_uris[0]);
+        // Check if we have previously stored a token.
+        return getToken(credentialsPath)
+    }).then(token => {
+        if (token) {
+                oAuth2Client.setCredentials(JSON.parse(token));
+            authorizedClients[credentialsPath] = oAuth2Client;
+            return oAuth2Client;
+        }
+        
+        return getAccessToken(oAuth2Client).then(token => {
+            saveToken(credentialsPath, token);
+            oAuth2Client.setCredentials(JSON.parse(token));
+            authorizedClients[credentialsPath] = oAuth2Client;
+            return oAuth2Client;
+            });
+        });
 }
 
 function getAccessToken(oAuth2Client) {
@@ -63,11 +105,8 @@ function getAccessToken(oAuth2Client) {
                 if (err) reject('Error retrieving access token', err);
                 oAuth2Client.setCredentials(token);
                 // Store the token to disk for later program executions
-                fs.writeFile(DEFAULTS.TOKEN_PATH, JSON.stringify(token), (err) => {
-                    if (err) return console.error(err);
-                    console.log('Token stored to', TOKEN_PATH);
+                resolve(JSON.stringify(token));
                 });
-                resolve(oAuth2Client);
             });
         });
     });
@@ -85,7 +124,7 @@ function parseNameVersionPair(filename, fallbackToZero = true) {
 
 async function backupFile({
     backupFileName,
-    credetialsPath,
+    credetialsPath = DEFAULTS.CREDENTIALS_PATH,
     sourceFileName,
     incrementVersion = false,
     pageSize = 100
